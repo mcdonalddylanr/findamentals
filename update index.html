@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FINdamentals Jr. — Teacher Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, onValue }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyBO8dhbT7uklcYJyqBCs8amW-HGhlG6iDA",
+    authDomain:        "findamentals-4.firebaseapp.com",
+    databaseURL:       "https://findamentals-4-default-rtdb.firebaseio.com",
+    projectId:         "findamentals-4",
+    storageBucket:     "findamentals-4.firebasestorage.app",
+    messagingSenderId: "124315012224",
+    appId:             "1:124315012224:web:8212cf90b32ab4c019aa65"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  // Simple hash: sum of charCodes * position, mod large prime → hex string
+  function hashPin(pin, classCode) {
+    const str = pin + '|' + classCode;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = (h * 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  }
+
+  window._fb = {
+    // Check if a class already has a PIN set
+    async classExists(classCode) {
+      const snap = await get(ref(db, `classes/${classCode.toUpperCase()}/pin`));
+      return snap.exists();
+    },
+    // Save a new class PIN (hashed)
+    async createClass(classCode, pin) {
+      const code = classCode.toUpperCase();
+      await set(ref(db, `classes/${code}/pin`), hashPin(pin, code));
+      await set(ref(db, `classes/${code}/createdAt`), Date.now());
+    },
+    // Verify PIN against stored hash
+    async verifyPin(classCode, pin) {
+      const code = classCode.toUpperCase();
+      const snap = await get(ref(db, `classes/${code}/pin`));
+      if (!snap.exists()) return false;
+      return snap.val() === hashPin(pin, code);
+    },
+    // Watch student data live
+    watchClass(classCode, callback) {
+      const path = `classes/${classCode.toUpperCase()}/students`;
+      onValue(ref(db, path), snap => {
+        callback(snap.exists() ? snap.val() : {});
+      });
+    }
+  };
+  window._fbReady = true;
+  document.dispatchEvent(new Event('fbReady'));
+</script>
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --sky:#4EC9F0;--sky-d:#2BA8CC;--sky-light:#E8F8FE;
+  --sun:#FFD43B;--sun-d:#CCA800;--sun-light:#FFF9E0;
+  --green:#51C46A;--green-d:#3A9E52;--green-light:#E8F8ED;
+  --red:#FF6B6B;--red-light:#FFE8E8;
+  --purple:#9B72D0;--purple-d:#7A50AF;--purple-light:#F0E9FA;
+  --orange:#FF8C42;--orange-light:#FFF0E6;
+  --navy:#1A2E44;--text:#2D3A4A;--text2:#5A6A7A;--text3:#9AAABB;
+  --white:#FFFFFF;--bg:#F0F8FF;--border:#D0E8F0;
+  --radius:14px;--radius-lg:22px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;min-height:100vh;}
+@keyframes popIn{from{opacity:0;transform:scale(0.96) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ── LOGIN SCREEN ── */
+#login-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#1A2E44 0%,#2563A8 100%);
+  padding:24px;
+}
+.login-card{
+  background:var(--white);border-radius:var(--radius-lg);
+  padding:40px 36px;max-width:400px;width:100%;text-align:center;
+  box-shadow:0 20px 60px rgba(0,0,0,.3);animation:popIn .4s ease;
+}
+.login-logo{font-family:'Fredoka One',cursive;font-size:28px;color:var(--navy);margin-bottom:4px;}
+.login-logo span{color:var(--sky);}
+.login-badge{display:inline-block;background:var(--navy);color:var(--white);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:20px;}
+.login-label{font-size:13px;font-weight:900;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;text-align:left;}
+.login-input{
+  width:100%;padding:14px 16px;border-radius:14px;border:3px solid var(--border);
+  font-family:'Nunito',sans-serif;font-size:18px;font-weight:800;color:var(--navy);
+  outline:none;transition:border-color .2s;margin-bottom:14px;
+}
+.login-input:focus{border-color:var(--sky);}
+.login-input.error{border-color:var(--red);}
+.login-btn{
+  width:100%;padding:16px;border-radius:16px;border:none;
+  background:var(--sky);color:var(--white);font-family:'Fredoka One',cursive;
+  font-size:22px;cursor:pointer;transition:all .2s;margin-top:4px;
+}
+.login-btn:hover{background:var(--sky-d);}
+.login-error{
+  background:var(--red-light);border:2px solid var(--red);border-radius:10px;
+  padding:10px 14px;font-size:14px;font-weight:700;color:var(--red);
+  margin-bottom:14px;display:none;
+}
+.login-hint{font-size:12px;font-weight:700;color:var(--text3);margin-top:12px;}
+.login-pin-note{
+  background:var(--sky-light);border:2px solid var(--sky);border-radius:10px;
+  padding:12px 14px;font-size:13px;font-weight:700;color:var(--navy);
+  margin-bottom:16px;text-align:left;line-height:1.6;
+}
+/* Tab switcher */
+.login-tabs{display:flex;gap:0;margin-bottom:24px;border-radius:14px;overflow:hidden;border:3px solid var(--border);}
+.login-tab{
+  flex:1;padding:12px;font-family:'Fredoka One',cursive;font-size:16px;
+  cursor:pointer;border:none;background:var(--bg);color:var(--text3);transition:all .2s;
+}
+.login-tab.active{background:var(--navy);color:var(--white);}
+/* Success notice */
+.login-success{
+  background:var(--green-light);border:2px solid var(--green);border-radius:10px;
+  padding:10px 14px;font-size:14px;font-weight:700;color:var(--green-d);
+  margin-bottom:14px;display:none;
+}
+.login-btn-green{
+  width:100%;padding:16px;border-radius:16px;border:none;
+  background:var(--green);color:var(--white);font-family:'Fredoka One',cursive;
+  font-size:22px;cursor:pointer;transition:all .2s;margin-top:4px;
+}
+.login-btn-green:hover{background:var(--green-d);}
+
+/* ── DASHBOARD SHELL ── */
+#dashboard-screen{display:none;}
+.dash-topbar{
+  background:var(--navy);padding:14px 24px;display:flex;align-items:center;
+  gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:100;
+  box-shadow:0 3px 14px rgba(0,0,0,.2);
+}
+.dash-topbar-logo{font-family:'Fredoka One',cursive;font-size:20px;color:var(--white);}
+.dash-topbar-logo span{color:var(--sky);}
+.dash-class-chip{
+  background:rgba(78,201,240,.2);border:2px solid rgba(78,201,240,.4);
+  border-radius:20px;padding:5px 14px;font-family:'Fredoka One',cursive;
+  font-size:14px;color:var(--sky);
+}
+.dash-topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.dash-live-dot{
+  width:10px;height:10px;border-radius:50%;background:#4ade80;
+  box-shadow:0 0 0 3px rgba(74,222,128,.3);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(74,222,128,.3)}50%{box-shadow:0 0 0 6px rgba(74,222,128,.1)}}
+.dash-live-label{font-size:13px;font-weight:800;color:rgba(255,255,255,.6);}
+.dash-logout{
+  background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.15);
+  border-radius:10px;padding:7px 14px;font-size:13px;font-weight:800;
+  color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s;
+}
+.dash-logout:hover{background:rgba(255,255,255,.2);color:var(--white);}
+
+.dash-body{padding:24px;max-width:1100px;margin:0 auto;}
+
+/* ── STAT CARDS ── */
+.summary-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:28px;}
+.sum-card{
+  background:var(--white);border-radius:var(--radius-lg);padding:18px 16px;
+  text-align:center;border:3px solid var(--border);box-shadow:0 4px 0 var(--border);
+}
+.sum-val{font-family:'Fredoka One',cursive;font-size:42px;color:var(--navy);line-height:1;}
+.sum-label{font-size:12px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-top:4px;}
+
+/* ── SECTION HEADER ── */
+.section-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;flex-wrap:wrap;gap:10px;
+}
+.section-title{font-family:'Fredoka One',cursive;font-size:22px;color:var(--navy);}
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;}
+.filter-btn{
+  padding:7px 14px;border-radius:10px;border:2px solid var(--border);
+  background:var(--white);font-size:13px;font-weight:800;color:var(--text2);
+  cursor:pointer;transition:all .15s;
+}
+.filter-btn.active{background:var(--sky);border-color:var(--sky);color:var(--white);}
+.search-input{
+  padding:8px 14px;border-radius:10px;border:2px solid var(--border);
+  font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;
+  color:var(--navy);outline:none;transition:border-color .2s;min-width:180px;
+}
+.search-input:focus{border-color:var(--sky);}
+
+/* ── STUDENT TABLE ── */
+.student-table{width:100%;border-collapse:separate;border-spacing:0 6px;}
+.student-table th{
+  text-align:left;font-size:11px;font-weight:900;color:var(--text3);
+  text-transform:uppercase;letter-spacing:1.2px;padding:8px 14px;
+}
+.student-row{
+  background:var(--white);border-radius:var(--radius);
+  box-shadow:0 2px 0 var(--border);cursor:pointer;
+  transition:all .15s;animation:slideIn .2s ease;
+}
+.student-row:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--border);}
+.student-row td{padding:14px 14px;vertical-align:middle;}
+.student-row td:first-child{border-radius:var(--radius) 0 0 var(--radius);}
+.student-row td:last-child{border-radius:0 var(--radius) var(--radius) 0;}
+.student-avatar{
+  width:36px;height:36px;border-radius:50%;background:var(--sky-light);
+  border:2px solid var(--sky);display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-family:'Fredoka One',cursive;color:var(--navy);font-weight:900;
+  flex-shrink:0;
+}
+.student-name{font-weight:900;font-size:15px;color:var(--navy);}
+.student-meta{font-size:12px;color:var(--text3);font-weight:700;}
+.progress-bar-wrap{width:100%;max-width:160px;}
+.progress-bar-track{height:10px;background:var(--sky-light);border-radius:5px;overflow:hidden;border:2px solid var(--border);}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--sky),#2BD4FF);border-radius:4px;transition:width .6s ease;}
+.progress-pct{font-family:'Fredoka One',cursive;font-size:13px;color:var(--text3);margin-top:3px;}
+.xp-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--sun-light);border:2px solid var(--sun);border-radius:10px;
+  padding:4px 10px;font-family:'Fredoka One',cursive;font-size:14px;color:var(--navy);
+}
+.last-active{font-size:13px;font-weight:700;color:var(--text2);}
+.time-chip{font-size:13px;font-weight:800;color:var(--text2);}
+.badge-mini{font-size:18px;}
+
+/* ── MODULE HEATMAP ── */
+.heatmap-wrap{
+  background:var(--white);border-radius:var(--radius-lg);padding:20px;
+  border:3px solid var(--border);box-shadow:0 4px 0 var(--border);
+  margin-bottom:28px;overflow-x:auto;
+}
+.heatmap-title{font-family:'Fredoka One',cursive;font-size:18px;color:var(--navy);margin-bottom:14px;}
+.heatmap-grid{display:grid;gap:8px;min-width:600px;}
+.heatmap-row{display:grid;grid-template-columns:160px repeat(9,1fr);gap:6px;align-items:center;}
+.heatmap-student-name{font-size:13px;font-weight:800;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.heatmap-cell{
+  height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:16px;border:2px solid transparent;transition:all .2s;cursor:default;
+}
+.heatmap-cell.done{background:var(--green-light);border-color:var(--green);}
+.heatmap-cell.not-done{background:var(--bg);border-color:var(--border);opacity:.5;}
+.heatmap-header{display:grid;grid-template-columns:160px repeat(9,1fr);gap:6px;margin-bottom:4px;}
+.heatmap-mod-label{font-size:10px;font-weight:900;color:var(--text3);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ── EMPTY & LOADING ── */
+.empty-state{text-align:center;padding:60px 24px;color:var(--text3);}
+.empty-icon{font-size:56px;display:block;margin-bottom:14px;}
+.empty-title{font-family:'Fredoka One',cursive;font-size:24px;color:var(--navy);margin-bottom:8px;}
+.empty-sub{font-size:15px;font-weight:700;line-height:1.65;}
+.loading-spinner{
+  width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--sky);
+  border-radius:50%;animation:spin 0.8s linear infinite;margin:60px auto;
+}
+
+/* ── STUDENT DETAIL PANEL ── */
+.detail-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.detail-panel{
+  background:var(--white);border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  padding:28px 24px 40px;width:100%;max-width:600px;
+  max-height:80vh;overflow-y:auto;animation:slideUp .3s ease;
+}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.detail-header{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+.detail-avatar{
+  width:52px;height:52px;border-radius:50%;background:var(--sky-light);
+  border:3px solid var(--sky);display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-family:'Fredoka One',cursive;color:var(--navy);
+}
+.detail-name{font-family:'Fredoka One',cursive;font-size:24px;color:var(--navy);}
+.detail-meta{font-size:13px;font-weight:700;color:var(--text3);}
+.detail-close{margin-left:auto;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:7px 12px;font-size:18px;cursor:pointer;}
+.detail-modules{display:flex;flex-direction:column;gap:8px;}
+.detail-mod-row{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  border-radius:var(--radius);border:2px solid var(--border);background:var(--bg);
+}
+.detail-mod-row.done{border-color:var(--green);background:var(--green-light);}
+.detail-mod-icon{font-size:24px;flex-shrink:0;}
+.detail-mod-name{font-weight:800;font-size:14px;color:var(--navy);flex:1;}
+.detail-mod-time{font-size:12px;font-weight:700;color:var(--text3);}
+.detail-mod-check{font-size:18px;}
+
+@media(max-width:700px){
+  .dash-body{padding:16px;}
+  .student-table th:nth-child(4),
+  .student-table td:nth-child(4),
+  .student-table th:nth-child(5),
+  .student-table td:nth-child(5){display:none;}
+  .heatmap-row,.heatmap-header{grid-template-columns:100px repeat(9,1fr);}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ LOGIN ══════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🦁 FIN<span>damentals</span> 4</div>
+    <div class="login-badge">👩‍🏫 Teacher Dashboard</div>
+
+    <!-- Tab switcher -->
+    <div class="login-tabs">
+      <button class="login-tab active" id="tab-signin" onclick="switchTab('signin')">Sign In</button>
+      <button class="login-tab" id="tab-setup" onclick="switchTab('setup')">Set Up My Class</button>
+    </div>
+
+    <!-- ── SIGN IN PANEL ── -->
+    <div id="panel-signin">
+      <div class="login-label">🏫 Your Class Code</div>
+      <input class="login-input" id="login-classcode" maxlength="12" placeholder="e.g. SMITH4A"
+        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-pin').focus()">
+
+      <div class="login-label">🔑 Your Teacher PIN</div>
+      <input class="login-input" id="login-pin" type="password" maxlength="8" placeholder="••••"
+        onkeydown="if(event.key==='Enter')submitLogin()">
+
+      <div class="login-error" id="login-error"></div>
+      <button class="login-btn" id="login-btn" onclick="submitLogin()">View My Class 📊</button>
+      <div class="login-hint">Don't have a class yet? Click <strong>Set Up My Class</strong> above.</div>
+    </div>
+
+    <!-- ── SETUP PANEL ── -->
+    <div id="panel-setup" style="display:none;">
+      <div class="login-pin-note">
+        🏫 Choose a class code your students will type in (e.g. <strong>SMITH4A</strong>), then create a PIN only you will know. You only do this once!
+      </div>
+
+      <div class="login-label">🏫 Choose a Class Code</div>
+      <input class="login-input" id="setup-classcode" maxlength="12" placeholder="e.g. SMITH4A"
+        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+        onkeydown="if(event.key==='Enter')document.getElementById('setup-pin').focus()">
+
+      <div class="login-label">🔑 Create Your PIN</div>
+      <input class="login-input" id="setup-pin" type="password" maxlength="8" placeholder="4–8 digits"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+        onkeydown="if(event.key==='Enter')document.getElementById('setup-pin-confirm').focus()">
+
+      <div class="login-label">🔑 Confirm Your PIN</div>
+      <input class="login-input" id="setup-pin-confirm" type="password" maxlength="8" placeholder="Same PIN again"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+        onkeydown="if(event.key==='Enter')submitSetup()">
+
+      <div class="login-error"  id="setup-error"></div>
+      <div class="login-success" id="setup-success"></div>
+      <button class="login-btn-green" id="setup-btn" onclick="submitSetup()">Create My Class ✅</button>
+      <div class="login-hint">Already set up? Click <strong>Sign In</strong> above.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════ DASHBOARD ══════════════ -->
+<div id="dashboard-screen">
+  <!-- Topbar -->
+  <div class="dash-topbar">
+    <div class="dash-topbar-logo">🦁 FIN<span>damentals</span> 4</div>
+    <div class="dash-class-chip" id="dash-class-label">Class: —</div>
+    <div class="dash-topbar-right">
+      <div class="dash-live-dot"></div>
+      <div class="dash-live-label">Live</div>
+      <button class="dash-logout" onclick="logout()">← Change Class</button>
+    </div>
+  </div>
+
+  <div class="dash-body">
+    <!-- Summary cards -->
+    <div class="summary-row" id="summary-row">
+      <div class="sum-card"><div class="sum-val" id="sum-students">—</div><div class="sum-label">Students</div></div>
+      <div class="sum-card"><div class="sum-val" id="sum-modules">—</div><div class="sum-label">Avg Modules Done</div></div>
+      <div class="sum-card"><div class="sum-val" id="sum-stars">—</div><div class="sum-label">Avg Stars ⭐</div></div>
+      <div class="sum-card"><div class="sum-val" id="sum-complete">—</div><div class="sum-label">Fully Complete 🏆</div></div>
+      <div class="sum-card"><div class="sum-val" id="sum-time">—</div><div class="sum-label">Avg Time (min)</div></div>
+    </div>
+
+    <!-- Module completion heatmap -->
+    <div class="heatmap-wrap" id="heatmap-wrap">
+      <div class="heatmap-title">📊 Module Completion by Student</div>
+      <div id="heatmap-container"><div class="loading-spinner"></div></div>
+    </div>
+
+    <!-- Student roster -->
+    <div class="section-hdr">
+      <div class="section-title">👩‍🎓 Student Roster</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input class="search-input" id="search-input" placeholder="🔍 Search student…" oninput="renderTable()">
+        <div class="filter-row" id="filter-row">
+          <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+          <button class="filter-btn" onclick="setFilter('complete',this)">✅ Complete</button>
+          <button class="filter-btn" onclick="setFilter('inprogress',this)">📖 In Progress</button>
+          <button class="filter-btn" onclick="setFilter('notstarted',this)">🆕 Not Started</button>
+        </div>
+      </div>
+    </div>
+    <div id="table-container"><div class="loading-spinner"></div></div>
+
+  </div><!-- end dash-body -->
+</div><!-- end dashboard-screen -->
+
+<!-- Student detail panel -->
+<div class="detail-overlay" id="detail-overlay" style="display:none;" onclick="if(event.target===this)closeDetail()">
+  <div class="detail-panel" id="detail-panel"></div>
+</div>
+
+<script>
+const MODULES = [
+  {id:'what-is-money',    icon:'🪙', name:'What is Money?'},
+  {id:'k2-needs-wants',   icon:'🍎', name:'Needs vs. Wants'},
+  {id:'saving-up',        icon:'🐷', name:'Saving Up'},
+  {id:'k2-spending',      icon:'🏪', name:'Spending Choices'},
+  {id:'learn-to-earn',    icon:'💪', name:'Learn to Earn'},
+  {id:'k2-goal-setting',  icon:'🎯', name:'Ready. Set. Goal!'},
+  {id:'super-savers',     icon:'🦸', name:'Super Savers'},
+  {id:'k2-borrowing',     icon:'🤲', name:'Borrowing & Lending'},
+  {id:'k2-producers',     icon:'🏭', name:'Producers & Consumers'},
+];
+const TOTAL_MODULES = MODULES.length;
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let currentClass  = '';
+let studentsData  = {};
+let activeFilter  = 'all';
+let activeStudent = null;
+
+// ── TAB SWITCHER ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('panel-signin').style.display = tab === 'signin' ? 'block' : 'none';
+  document.getElementById('panel-setup').style.display  = tab === 'setup'  ? 'block' : 'none';
+  document.getElementById('tab-signin').classList.toggle('active', tab === 'signin');
+  document.getElementById('tab-setup').classList.toggle('active',  tab === 'setup');
+  document.getElementById('login-error').style.display  = 'none';
+  document.getElementById('setup-error').style.display  = 'none';
+  document.getElementById('setup-success').style.display = 'none';
+}
+
+// ── SIGN IN ───────────────────────────────────────────────────────────────────
+async function submitLogin() {
+  const code  = (document.getElementById('login-classcode').value || '').trim().toUpperCase();
+  const pin   = (document.getElementById('login-pin').value || '').trim();
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+
+  if (!code || !pin) {
+    showError(errEl, '❌ Please enter both your class code and PIN.');
+    return;
+  }
+
+  btn.textContent = 'Checking…';
+  btn.disabled = true;
+
+  try {
+    await waitForFb();
+    const exists = await window._fb.classExists(code);
+    if (!exists) {
+      showError(errEl, '❌ Class code not found. Did you set up your class yet?');
+      btn.textContent = 'View My Class 📊'; btn.disabled = false; return;
+    }
+    const ok = await window._fb.verifyPin(code, pin);
+    if (!ok) {
+      showError(errEl, '❌ Wrong PIN. Try again!');
+      document.getElementById('login-pin').value = '';
+      btn.textContent = 'View My Class 📊'; btn.disabled = false; return;
+    }
+    errEl.style.display = 'none';
+    currentClass = code;
+    sessionStorage.setItem('td_class', code);
+    showDashboard();
+  } catch(e) {
+    showError(errEl, '❌ Connection error. Check your internet and try again.');
+    btn.textContent = 'View My Class 📊'; btn.disabled = false;
+  }
+}
+
+// ── CLASS SETUP ───────────────────────────────────────────────────────────────
+async function submitSetup() {
+  const code    = (document.getElementById('setup-classcode').value || '').trim().toUpperCase();
+  const pin     = (document.getElementById('setup-pin').value || '').trim();
+  const confirm = (document.getElementById('setup-pin-confirm').value || '').trim();
+  const errEl   = document.getElementById('setup-error');
+  const sucEl   = document.getElementById('setup-success');
+  const btn     = document.getElementById('setup-btn');
+
+  errEl.style.display = 'none';
+  sucEl.style.display = 'none';
+
+  if (!code) { showError(errEl, '❌ Please choose a class code.'); return; }
+  if (code.length < 3) { showError(errEl, '❌ Class code must be at least 3 characters.'); return; }
+  if (!pin || pin.length < 4) { showError(errEl, '❌ PIN must be at least 4 digits.'); return; }
+  if (pin !== confirm) { showError(errEl, '❌ PINs don\'t match. Try again!');
+    document.getElementById('setup-pin-confirm').value = ''; return; }
+
+  btn.textContent = 'Creating…';
+  btn.disabled = true;
+
+  try {
+    await waitForFb();
+    const exists = await window._fb.classExists(code);
+    if (exists) {
+      showError(errEl, `❌ Class code "${code}" is already taken. Try a different one (e.g. add your initial or room number).`);
+      btn.textContent = 'Create My Class ✅'; btn.disabled = false; return;
+    }
+    await window._fb.createClass(code, pin);
+    sucEl.textContent = `✅ Class "${code}" created! Switching you to sign in…`;
+    sucEl.style.display = 'block';
+    btn.textContent = 'Created!';
+    // Pre-fill sign-in and switch tab after 1.5s
+    setTimeout(() => {
+      document.getElementById('login-classcode').value = code;
+      document.getElementById('login-pin').value = '';
+      switchTab('signin');
+      btn.textContent = 'Create My Class ✅'; btn.disabled = false;
+    }, 1500);
+  } catch(e) {
+    showError(errEl, '❌ Connection error. Check your internet and try again.');
+    btn.textContent = 'Create My Class ✅'; btn.disabled = false;
+  }
+}
+
+// ── LOGOUT ────────────────────────────────────────────────────────────────────
+function logout() {
+  sessionStorage.removeItem('td_class');
+  currentClass = '';
+  studentsData = {};
+  document.getElementById('login-screen').style.display    = 'flex';
+  document.getElementById('dashboard-screen').style.display = 'none';
+  document.getElementById('login-pin').value = '';
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function showError(el, msg) {
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function waitForFb() {
+  return new Promise(resolve => {
+    if (window._fbReady) { resolve(); return; }
+    document.addEventListener('fbReady', resolve, { once: true });
+  });
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+function showDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard-screen').style.display = 'block';
+  document.getElementById('dash-class-label').textContent = `Class: ${currentClass}`;
+
+  // Show loading spinners
+  document.getElementById('table-container').innerHTML   = '<div class="loading-spinner"></div>';
+  document.getElementById('heatmap-container').innerHTML = '<div class="loading-spinner"></div>';
+
+  // Wait for Firebase then start listening
+  function startWatch() {
+    window._fb.watchClass(currentClass, data => {
+      studentsData = data;
+      updateSummary();
+      renderTable();
+      renderHeatmap();
+    });
+  }
+  if (window._fbReady) { startWatch(); }
+  else { document.addEventListener('fbReady', startWatch, { once: true }); }
+}
+
+// ── SUMMARY CARDS ────────────────────────────────────────────────────────────
+function updateSummary() {
+  const students = Object.values(studentsData);
+  const n = students.length;
+  if (n === 0) {
+    ['sum-students','sum-modules','sum-stars','sum-complete','sum-time']
+      .forEach(id => document.getElementById(id).textContent = '0');
+    return;
+  }
+  const avgModules  = (students.reduce((a,s) => a + Object.keys(s.completed||{}).length, 0) / n).toFixed(1);
+  const avgStars    = Math.round(students.reduce((a,s) => a + (s.xp||0), 0) / n);
+  const fullDone    = students.filter(s => Object.keys(s.completed||{}).length === TOTAL_MODULES).length;
+  const totalTime   = students.reduce((a,s) => a + Object.values(s.moduleTimes||{}).reduce((x,y)=>x+y,0), 0);
+  const avgTime     = Math.round(totalTime / n);
+
+  document.getElementById('sum-students').textContent = n;
+  document.getElementById('sum-modules').textContent  = avgModules;
+  document.getElementById('sum-stars').textContent    = avgStars;
+  document.getElementById('sum-complete').textContent = fullDone;
+  document.getElementById('sum-time').textContent     = avgTime;
+}
+
+// ── HEATMAP ──────────────────────────────────────────────────────────────────
+function renderHeatmap() {
+  const students = Object.values(studentsData);
+  const container = document.getElementById('heatmap-container');
+
+  if (students.length === 0) {
+    container.innerHTML = '<div class="empty-state"><span class="empty-icon">📭</span><div class="empty-title">No students yet</div><div class="empty-sub">Share your class code <strong>' + currentClass + '</strong> with students and their progress will appear here live!</div></div>';
+    return;
+  }
+
+  // Header row
+  const headerHTML = `<div class="heatmap-header">
+    <div></div>
+    ${MODULES.map(m => `<div class="heatmap-mod-label" title="${m.name}">${m.icon}</div>`).join('')}
+  </div>`;
+
+  const rowsHTML = students.map(s => {
+    const cells = MODULES.map(m => {
+      const done = s.completed && s.completed[m.id];
+      return `<div class="heatmap-cell ${done?'done':'not-done'}" title="${m.name}: ${done?'✅ Complete':'Not started'}">${done?'✅':'·'}</div>`;
+    }).join('');
+    return `<div class="heatmap-row">
+      <div class="heatmap-student-name" title="${s.nickname}">${s.nickname}</div>
+      ${cells}
+    </div>`;
+  }).join('');
+
+  container.innerHTML = headerHTML + `<div class="heatmap-grid">${rowsHTML}</div>`;
+}
+
+// ── STUDENT TABLE ─────────────────────────────────────────────────────────────
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+function renderTable() {
+  const search   = (document.getElementById('search-input').value || '').toLowerCase();
+  let students   = Object.values(studentsData);
+
+  // Search
+  if (search) students = students.filter(s => s.nickname.toLowerCase().includes(search));
+
+  // Filter
+  students = students.filter(s => {
+    const done = Object.keys(s.completed || {}).length;
+    if (activeFilter === 'complete')   return done === TOTAL_MODULES;
+    if (activeFilter === 'inprogress') return done > 0 && done < TOTAL_MODULES;
+    if (activeFilter === 'notstarted') return done === 0;
+    return true;
+  });
+
+  // Sort: most modules done first
+  students.sort((a,b) => Object.keys(b.completed||{}).length - Object.keys(a.completed||{}).length);
+
+  const container = document.getElementById('table-container');
+
+  if (students.length === 0) {
+    container.innerHTML = `<div class="empty-state">
+      <span class="empty-icon">🔍</span>
+      <div class="empty-title">${Object.keys(studentsData).length === 0 ? 'Waiting for students…' : 'No students match'}</div>
+      <div class="empty-sub">${Object.keys(studentsData).length === 0
+        ? `Share class code <strong>${currentClass}</strong> with your students. Their progress will appear here automatically!`
+        : 'Try changing your search or filter.'}</div>
+    </div>`;
+    return;
+  }
+
+  const rows = students.map(s => {
+    const done      = Object.keys(s.completed || {}).length;
+    const pct       = Math.round((done / TOTAL_MODULES) * 100);
+    const totalTime = Object.values(s.moduleTimes || {}).reduce((a,b) => a+b, 0);
+    const lastDate  = s.lastActive ? formatDate(s.lastActive) : 'Never';
+    const initials  = (s.nickname||'?')[0].toUpperCase();
+    const badges    = MODULES.filter(m => s.completed && s.completed[m.id]).map(m => m.icon).join('');
+
+    return `<tr class="student-row" onclick="openDetail('${s.nickname}')">
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="student-avatar">${initials}</div>
+          <div>
+            <div class="student-name">${s.nickname}</div>
+            <div class="student-meta">${done}/${TOTAL_MODULES} modules</div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+          <div class="progress-pct">${pct}%</div>
+        </div>
+      </td>
+      <td><div class="xp-chip">⭐ ${s.xp||0}</div></td>
+      <td><div class="last-active">${lastDate}</div></td>
+      <td><div class="time-chip">⏱ ${totalTime || 0} min</div></td>
+      <td><div style="font-size:16px;letter-spacing:2px;">${badges || '—'}</div></td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `<table class="student-table">
+    <thead><tr>
+      <th>Student</th>
+      <th>Progress</th>
+      <th>Stars</th>
+      <th>Last Active</th>
+      <th>Time Spent</th>
+      <th>Badges</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ── STUDENT DETAIL ────────────────────────────────────────────────────────────
+function openDetail(nickname) {
+  const s = studentsData[nickname];
+  if (!s) return;
+  activeStudent = nickname;
+  const done      = Object.keys(s.completed || {}).length;
+  const totalTime = Object.values(s.moduleTimes || {}).reduce((a,b) => a+b, 0);
+  const lastDate  = s.lastActive ? formatDate(s.lastActive) : 'Never';
+
+  const modRows = MODULES.map(m => {
+    const isDone = s.completed && s.completed[m.id];
+    const time   = s.moduleTimes && s.moduleTimes[m.id];
+    return `<div class="detail-mod-row ${isDone?'done':''}">
+      <div class="detail-mod-icon">${m.icon}</div>
+      <div class="detail-mod-name">${m.name}</div>
+      <div class="detail-mod-time">${time ? `⏱ ${time} min` : ''}</div>
+      <div class="detail-mod-check">${isDone ? '✅' : '·'}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-header">
+      <div class="detail-avatar">${(s.nickname||'?')[0].toUpperCase()}</div>
+      <div>
+        <div class="detail-name">${s.nickname}</div>
+        <div class="detail-meta">${done}/${TOTAL_MODULES} modules · ⭐ ${s.xp||0} stars · ⏱ ${totalTime} min total · Last active: ${lastDate}</div>
+      </div>
+      <button class="detail-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-modules">${modRows}</div>
+  `;
+  document.getElementById('detail-overlay').style.display = 'flex';
+}
+
+function closeDetail() {
+  document.getElementById('detail-overlay').style.display = 'none';
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function formatDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs  = now - d;
+  const diffMin = Math.round(diffMs / 60000);
+  const diffHr  = Math.round(diffMs / 3600000);
+  const diffDay = Math.round(diffMs / 86400000);
+  if (diffMin < 2)  return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr  < 24) return `${diffHr}h ago`;
+  if (diffDay === 1) return 'Yesterday';
+  if (diffDay < 7)  return `${diffDay}d ago`;
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+}
+
+// ── AUTO-RESTORE SESSION ─────────────────────────────────────────────────────
+(function init() {
+  const saved = sessionStorage.getItem('td_class');
+  if (saved) {
+    // Pre-fill the class code field but still require PIN re-entry for security
+    document.getElementById('login-classcode').value = saved;
+  }
+})();
+</script>
+</body>
+</html>
